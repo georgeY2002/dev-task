@@ -49,6 +49,54 @@ Copy `.env.example` to `.env.local` and fill in values when you connect AWS (lat
 | `AWS_REGION`| AWS region for DynamoDB              |
 | `TABLE_NAME`| Single-table DynamoDB table name     |
 
+## DynamoDB Table Setup
+
+This project uses the AWS CLI for DynamoDB table setup because the required
+infrastructure is intentionally small: one on-demand table with a composite
+primary key. A full IaC stack would add more process than value for this
+take-home phase.
+
+Create the table:
+
+```bash
+aws dynamodb create-table \
+  --table-name provider-reviews \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions \
+    AttributeName=pk,AttributeType=S \
+    AttributeName=sk,AttributeType=S \
+  --key-schema \
+    AttributeName=pk,KeyType=HASH \
+    AttributeName=sk,KeyType=RANGE \
+  --region us-east-1
+```
+
+Or run the helper script:
+
+```bash
+AWS_REGION=us-east-1 TABLE_NAME=provider-reviews ./scripts/create-dynamodb-table.sh
+```
+
+Wait for the table to become active:
+
+```bash
+aws dynamodb wait table-exists \
+  --table-name provider-reviews \
+  --region us-east-1
+```
+
+Verify the table exists:
+
+```bash
+aws dynamodb describe-table \
+  --table-name provider-reviews \
+  --region us-east-1 \
+  --query 'Table.{TableName:TableName,Status:TableStatus,BillingMode:BillingModeSummary.BillingMode,KeySchema:KeySchema}'
+```
+
+The application accesses reviews with keyed DynamoDB queries by `pk`; it does
+not perform table-wide reads.
+
 ## Deployment
 
 Not documented yet. Plan: build with `npm run build`, run with `npm run start`, and configure `AWS_REGION` and `TABLE_NAME` in the hosting environment with an IAM role that allows DynamoDB access required by the app (details in a later phase).
@@ -56,7 +104,7 @@ Not documented yet. Plan: build with `npm run build`, run with `npm run start`, 
 ## Improvements with more time
 
 - Full reviews list and create flow with `{ data, error }` API envelope
-- Single-table DynamoDB design with Query-by-`pk` only (no Scan)
+- Single-table DynamoDB design with keyed reads by `pk` only
 - Tests and CI, observability, and stricter production hardening
 
 ## Hours spent
