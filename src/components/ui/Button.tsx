@@ -33,7 +33,7 @@ export function Button({
   }
 
   const base =
-    "relative inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/30 disabled:pointer-events-none disabled:opacity-50";
+    "relative inline-flex items-center justify-center gap-2 rounded-md font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/30 disabled:pointer-events-none disabled:opacity-50";
 
   const sizes: Record<ButtonSize, string> = {
     sm: "h-9 min-h-9 px-3 text-sm",

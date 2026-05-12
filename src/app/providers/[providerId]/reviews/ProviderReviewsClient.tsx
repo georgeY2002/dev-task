@@ -94,6 +94,10 @@ function getAverageRating(reviews: Review[]): string {
   return `${(total / reviews.length).toFixed(1)} / 5`;
 }
 
+function getRatingStars(rating: number): string {
+  return "★★★★★".slice(0, rating);
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en", {
     month: "short",
@@ -110,10 +114,10 @@ function ReviewSkeleton() {
           key={item}
           className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"
         >
-          <div className="h-4 w-28 animate-pulse rounded bg-slate-200" />
-          <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-slate-200" />
-          <div className="mt-3 h-4 w-full animate-pulse rounded bg-slate-100" />
-          <div className="mt-2 h-4 w-5/6 animate-pulse rounded bg-slate-100" />
+          <div className="h-4 w-28 rounded bg-slate-200" />
+          <div className="mt-3 h-5 w-2/3 rounded bg-slate-200" />
+          <div className="mt-3 h-4 w-full rounded bg-slate-100" />
+          <div className="mt-2 h-4 w-5/6 rounded bg-slate-100" />
         </div>
       ))}
     </div>
@@ -124,7 +128,12 @@ function ReviewItem({ review }: { review: Review }) {
   return (
     <article className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Badge variant="neutral">{review.rating} / 5</Badge>
+        <Badge variant="neutral">
+          <span aria-label={`${review.rating} out of 5`}>
+            {getRatingStars(review.rating)}
+          </span>
+          <span className="ml-1 text-slate-500">{review.rating}/5</span>
+        </Badge>
         <p className="text-sm text-slate-500">{formatDate(review.createdAt)}</p>
       </div>
       <h3 className="mt-3 text-base font-semibold text-slate-950">
@@ -299,7 +308,8 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
   const showPopulatedState = !isLoadingInitial && visibleReviews.length > 0;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
+    <main className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <section className="space-y-6">
           <header className="space-y-3">
@@ -313,8 +323,11 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
               </h1>
               <p className="mt-2 text-slate-600">Patient reviews</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant={visibleReviews.length > 0 ? "success" : "neutral"}>
+            <div className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+              <Badge
+                variant={visibleReviews.length > 0 ? "success" : "neutral"}
+                className="text-sm"
+              >
                 Average rating: {averageRating}
               </Badge>
               <span className="text-sm text-slate-500">
@@ -328,7 +341,7 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
             {isLoadingInitial ? <ReviewSkeleton /> : null}
 
             {!isLoadingInitial && listError ? (
-              <div className="rounded-md border border-red-200 bg-red-50 p-4">
+              <div className="rounded-md border border-red-200 bg-red-50 p-5">
                 <p className="text-sm font-medium text-red-900">
                   Could not load reviews.
                 </p>
@@ -345,7 +358,7 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
             ) : null}
 
             {isRefreshingAfterSubmit && submittedReview ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-5">
                 <p className="text-sm font-medium text-amber-950">
                   Your review was submitted.
                 </p>
@@ -390,10 +403,13 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
           </div>
         </section>
 
-        <aside className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+        <aside className="rounded-md border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
           <h2 className="text-lg font-semibold text-slate-950">
             Write a review
           </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Share a concise note about your visit.
+          </p>
           <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
             <div>
               <RatingInput
@@ -412,6 +428,7 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
 
             <Input
               label="Title"
+              placeholder="Brief summary"
               value={form.title}
               maxLength={REVIEW_TITLE_MAX_LENGTH}
               disabled={isSubmitting}
@@ -426,6 +443,7 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
 
             <Textarea
               label="Review"
+              placeholder="What stood out about the visit?"
               value={form.body}
               maxLength={REVIEW_BODY_MAX_LENGTH}
               disabled={isSubmitting}
@@ -440,6 +458,7 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
 
             <Input
               label="Your name"
+              placeholder="Name shown with your review"
               value={form.authorName}
               maxLength={REVIEW_AUTHOR_NAME_MAX_LENGTH}
               disabled={isSubmitting}
@@ -466,6 +485,7 @@ export function ProviderReviewsClient({ provider }: ProviderReviewsClientProps) 
             </Button>
           </form>
         </aside>
+      </div>
       </div>
     </main>
   );

@@ -1,6 +1,6 @@
 # Provider Reviews Mini-Service
 
-Live URL: `https://<app-runner-default-domain>`
+Live URL: `http://3.254.61.209/providers/demo-001/reviews`
 
 GitHub repo: `https://github.com/<your-username>/<your-repo>`
 
@@ -158,12 +158,15 @@ aws dynamodb describe-table \
 Deployment uses AWS App Runner because it is simpler than ECS for a small public
 containerized app. App Runner can pull the image from ECR, run the container,
 manage HTTPS, and provide a public URL without requiring ECS clusters, services,
-load balancers, or target groups.
+load balancers, or target groups. App Runner is not available in `eu-north-1`,
+so these steps run App Runner and ECR in `eu-west-1` while the app still points
+to the DynamoDB table in `eu-north-1`.
 
 Set variables:
 
 ```bash
-export AWS_REGION=eu-north-1
+export APP_RUNNER_REGION=eu-west-1
+export DDB_REGION=eu-north-1
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export ECR_REPOSITORY=provider-reviews-mini-service
 export IMAGE_TAG=latest
@@ -174,14 +177,14 @@ Create ECR repository:
 ```bash
 aws ecr create-repository \
   --repository-name "$ECR_REPOSITORY" \
-  --region "$AWS_REGION"
+  --region "$APP_RUNNER_REGION"
 ```
 
 Log Docker into ECR:
 
 ```bash
-aws ecr get-login-password --region "$AWS_REGION" \
-  | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+aws ecr get-login-password --region "$APP_RUNNER_REGION" \
+  | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$APP_RUNNER_REGION.amazonaws.com"
 ```
 
 Build, tag, and push:
@@ -190,9 +193,9 @@ Build, tag, and push:
 docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" .
 
 docker tag "$ECR_REPOSITORY:$IMAGE_TAG" \
-  "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
+  "$AWS_ACCOUNT_ID.dkr.ecr.$APP_RUNNER_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
 
-docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$APP_RUNNER_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
 ```
 
 Create the App Runner instance role trust policy:
@@ -226,7 +229,7 @@ Create and attach the scoped DynamoDB policy:
 
 ```bash
 sed \
-  -e "s/<region>/$AWS_REGION/g" \
+  -e "s/<region>/$DDB_REGION/g" \
   -e "s/<account-id>/$AWS_ACCOUNT_ID/g" \
   infra/iam/apprunner-dynamodb-policy.json \
   > /tmp/provider-reviews-dynamodb-policy.json
@@ -242,7 +245,7 @@ aws iam attach-role-policy \
 
 Create the App Runner service in the AWS Console:
 
-1. Open App Runner in the same region as DynamoDB.
+1. Open App Runner in `eu-west-1`.
 2. Choose **Create service**.
 3. Source: **Container registry**.
 4. Provider: **Amazon ECR**.
@@ -367,8 +370,8 @@ The app only needs:
 - `dynamodb:PutItem` to create reviews
 - `dynamodb:Query` to list reviews by provider
 
-The policy intentionally does not use `dynamodb:*` and does not use `Resource:
-"*"`.
+The policy intentionally avoids wildcard DynamoDB actions and wildcard
+resources.
 
 ## Assignment Checklist
 
