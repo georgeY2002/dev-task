@@ -1,25 +1,62 @@
-# Provider Reviews Mini-Service (SyncRa)
+# Provider Reviews Mini-Service
 
-## Overview
+Live URL: `https://<app-runner-default-domain>`
 
-Next.js App Router app for a small **provider reviews** experience: patients can submit and read reviews for a provider. This repository is being built in phases; later work will add DynamoDB, API routes, and the full reviews UI.
+GitHub repo: `https://github.com/<your-username>/<your-repo>`
 
-## Tech stack
+## Project Overview
 
-- Next.js (App Router), **TypeScript strict**, React
+This is a small provider reviews application built for a take-home assignment.
+Users can open a provider reviews page, view existing reviews, see the average
+rating, submit a new review, and load additional reviews through cursor-based
+pagination. The app uses a hardcoded provider seed and stores reviews in
+DynamoDB with a single-table key design.
+
+## Tech Stack
+
+- Next.js App Router
+- React
+- TypeScript strict mode
 - Tailwind CSS
-- Zod
-- AWS DynamoDB via DocumentClient
+- Zod for shared client/server validation
+- AWS SDK v3 DynamoDB DocumentClient
+- DynamoDB on-demand table
+- Docker standalone Next.js image
+- AWS ECR and App Runner for deployment
 
-## Local setup
+## Local Setup
 
-1. Install dependencies: `npm install`
-2. Run the dev server: `npm run dev`
-3. Open [http://localhost:3000](http://localhost:3000)
+Install dependencies:
 
-Other scripts: `npm run build`, `npm run start`, `npm run lint`, `npm run typecheck`.
+```bash
+npm install
+```
 
-## Local Docker
+Run the local dev server:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000/providers/demo-001/reviews
+```
+
+Useful scripts:
+
+```bash
+npm run build
+npm run start
+npm run typecheck
+```
+
+When `AWS_REGION` and `TABLE_NAME` are not set in non-production mode, the app
+uses an in-memory development fallback so the UI can be tested without AWS. Set
+both variables to use DynamoDB locally.
+
+## Local Docker Setup
 
 Build the production image:
 
@@ -27,34 +64,56 @@ Build the production image:
 docker build -t provider-reviews-mini-service .
 ```
 
-Run the production Next.js server:
+Run the container:
 
 ```bash
 docker run --rm -p 3000:3000 \
-  -e AWS_REGION=us-east-1 \
+  -e AWS_REGION=eu-north-1 \
   -e TABLE_NAME=provider-reviews \
   provider-reviews-mini-service
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The container expects AWS
-credentials to be provided by the runtime environment when it needs to access
-DynamoDB.
+If port `3000` is already in use:
 
-## Environment variables
+```bash
+docker run --rm -p 3001:3000 \
+  -e AWS_REGION=eu-north-1 \
+  -e TABLE_NAME=provider-reviews \
+  provider-reviews-mini-service
+```
 
-Copy `.env.example` to `.env.local` and fill in values when you connect AWS (later phases).
+Open `http://localhost:3001/providers/demo-001/reviews`.
 
-| Variable     | Description                          |
-|-------------|--------------------------------------|
-| `AWS_REGION`| AWS region for DynamoDB              |
-| `TABLE_NAME`| Single-table DynamoDB table name     |
+For local Docker access to AWS using your local AWS CLI credentials:
+
+```bash
+docker run --rm -p 3001:3000 \
+  -e AWS_REGION=eu-north-1 \
+  -e TABLE_NAME=provider-reviews \
+  -v ~/.aws:/home/nextjs/.aws:ro \
+  provider-reviews-mini-service
+```
+
+## Environment Variables
+
+| Variable     | Required in production | Description                      |
+|--------------|------------------------|----------------------------------|
+| `AWS_REGION` | Yes                    | AWS region for DynamoDB          |
+| `TABLE_NAME` | Yes                    | DynamoDB table name              |
+
+Example:
+
+```bash
+AWS_REGION=eu-north-1
+TABLE_NAME=provider-reviews
+```
 
 ## DynamoDB Table Setup
 
-This project uses the AWS CLI for DynamoDB table setup because the required
-infrastructure is intentionally small: one on-demand table with a composite
-primary key. A full IaC stack would add more process than value for this
-take-home phase.
+AWS CLI is used because the infrastructure for this assignment is intentionally
+small: one DynamoDB table with on-demand billing and a composite primary key.
+Using CDK/Terraform/CloudFormation would be reasonable for a larger system, but
+it would add unnecessary setup for this take-home.
 
 Create the table:
 
@@ -68,59 +127,40 @@ aws dynamodb create-table \
   --key-schema \
     AttributeName=pk,KeyType=HASH \
     AttributeName=sk,KeyType=RANGE \
-  --region us-east-1
+  --region eu-north-1
 ```
 
 Or run the helper script:
 
 ```bash
-AWS_REGION=us-east-1 TABLE_NAME=provider-reviews ./scripts/create-dynamodb-table.sh
+AWS_REGION=eu-north-1 TABLE_NAME=provider-reviews ./scripts/create-dynamodb-table.sh
 ```
 
-Wait for the table to become active:
+Wait for the table:
 
 ```bash
 aws dynamodb wait table-exists \
   --table-name provider-reviews \
-  --region us-east-1
+  --region eu-north-1
 ```
 
-Verify the table exists:
-
-```bash
-aws dynamodb describe-table \
-  --table-name provider-reviews \
-  --region us-east-1 \
-  --query 'Table.{TableName:TableName,Status:TableStatus,BillingMode:BillingModeSummary.BillingMode,KeySchema:KeySchema}'
-```
-
-The application accesses reviews with keyed DynamoDB queries by `pk`; it does
-not perform table-wide reads.
-
-## Deployment
-
-Use AWS App Runner for this take-home deployment. It is simpler than ECS for a
-small public containerized web app: App Runner can pull from ECR, run the
-container, manage HTTPS, and provide a public URL without requiring cluster,
-load balancer, or service networking setup.
-
-These examples use `eu-north-1` and `provider-reviews`. Change them if your
-DynamoDB table uses a different region or table name.
-
-### 1. Confirm the DynamoDB table
+Verify the table:
 
 ```bash
 aws dynamodb describe-table \
   --table-name provider-reviews \
   --region eu-north-1 \
-  --query 'Table.{TableName:TableName,Status:TableStatus}'
+  --query 'Table.{TableName:TableName,Status:TableStatus,BillingMode:BillingModeSummary.BillingMode,KeySchema:KeySchema}'
 ```
 
-The status should be `ACTIVE`.
+## AWS Deployment
 
-### 2. Build and push the image to ECR
+Deployment uses AWS App Runner because it is simpler than ECS for a small public
+containerized app. App Runner can pull the image from ECR, run the container,
+manage HTTPS, and provide a public URL without requiring ECS clusters, services,
+load balancers, or target groups.
 
-Set deployment variables:
+Set variables:
 
 ```bash
 export AWS_REGION=eu-north-1
@@ -129,7 +169,7 @@ export ECR_REPOSITORY=provider-reviews-mini-service
 export IMAGE_TAG=latest
 ```
 
-Create an ECR repository:
+Create ECR repository:
 
 ```bash
 aws ecr create-repository \
@@ -137,7 +177,7 @@ aws ecr create-repository \
   --region "$AWS_REGION"
 ```
 
-Authenticate Docker to ECR:
+Log Docker into ECR:
 
 ```bash
 aws ecr get-login-password --region "$AWS_REGION" \
@@ -155,14 +195,7 @@ docker tag "$ECR_REPOSITORY:$IMAGE_TAG" \
 docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
 ```
 
-### 3. Create the App Runner instance role
-
-The running container only needs to write reviews and query reviews from one
-DynamoDB table. The policy template is in
-`infra/iam/apprunner-dynamodb-policy.json`; replace `<region>` and
-`<account-id>` with your values before attaching it.
-
-Create a trust policy file locally:
+Create the App Runner instance role trust policy:
 
 ```bash
 cat > /tmp/apprunner-instance-trust-policy.json <<'JSON'
@@ -189,7 +222,7 @@ aws iam create-role \
   --assume-role-policy-document file:///tmp/apprunner-instance-trust-policy.json
 ```
 
-Create a scoped DynamoDB policy from the template:
+Create and attach the scoped DynamoDB policy:
 
 ```bash
 sed \
@@ -201,67 +234,213 @@ sed \
 aws iam create-policy \
   --policy-name provider-reviews-dynamodb-policy \
   --policy-document file:///tmp/provider-reviews-dynamodb-policy.json
-```
 
-Attach it to the role:
-
-```bash
 aws iam attach-role-policy \
   --role-name provider-reviews-apprunner-instance-role \
   --policy-arn "arn:aws:iam::$AWS_ACCOUNT_ID:policy/provider-reviews-dynamodb-policy"
 ```
 
-This policy is scoped to the specific table ARN and only allows:
+Create the App Runner service in the AWS Console:
 
-- `dynamodb:PutItem`
-- `dynamodb:Query`
-
-It does not grant wildcard DynamoDB access.
-
-### 4. Create the App Runner service
-
-In the AWS Console:
-
-1. Open **App Runner** in the same region as the table.
+1. Open App Runner in the same region as DynamoDB.
 2. Choose **Create service**.
 3. Source: **Container registry**.
 4. Provider: **Amazon ECR**.
-5. Select the ECR image you pushed.
-6. Deployment trigger: choose manual or automatic.
-7. Port: `3000`.
-8. Runtime environment variables:
+5. Select the pushed image.
+6. Set port to `3000`.
+7. Add environment variables:
    - `AWS_REGION=eu-north-1`
    - `TABLE_NAME=provider-reviews`
-9. Security configuration / instance role:
-   - `provider-reviews-apprunner-instance-role`
+8. Select instance role `provider-reviews-apprunner-instance-role`.
+9. Let App Runner create or use an ECR access role if prompted.
 10. Create and deploy the service.
 
-App Runner also needs permission to pull from ECR. If the console prompts for an
-ECR access role, let App Runner create the service-linked/access role, or choose
-an existing App Runner ECR access role.
-
-### 5. Check the live URL
-
-When deployment finishes, open the App Runner default domain shown in the
-service details. Test the app at:
+Check the live URL:
 
 ```text
 https://<app-runner-default-domain>/providers/demo-001/reviews
 ```
 
-Submit a review, refresh the page, and confirm the review persists. If the page
-shows an API error, check the App Runner logs and confirm the service has:
+Submit a review and refresh the page. The review should persist because the
+container is using DynamoDB.
 
-- `AWS_REGION` matching the DynamoDB table region
-- `TABLE_NAME=provider-reviews`
-- the instance role with the scoped DynamoDB policy attached
+## API Documentation
 
-## Improvements with more time
+All API responses use this envelope:
 
-- Full reviews list and create flow with `{ data, error }` API envelope
-- Single-table DynamoDB design with keyed reads by `pk` only
-- Tests and CI, observability, and stricter production hardening
+```ts
+type ApiEnvelope<T> =
+  | { data: T; error: null }
+  | { data: null; error: { message: string; code?: string; details?: unknown } };
+```
 
-## Hours spent
+### List Reviews
 
-_(Fill in after you finish the take-home.)_
+```http
+GET /api/providers/:id/reviews?limit=10&cursor=<nextCursor>
+```
+
+Success status: `200`
+
+Response:
+
+```json
+{
+  "data": {
+    "reviews": [
+      {
+        "reviewId": "uuid",
+        "providerId": "demo-001",
+        "rating": 5,
+        "title": "Excellent visit",
+        "body": "Clear and helpful.",
+        "authorName": "George",
+        "createdAt": "2026-05-12T13:53:06.095Z"
+      }
+    ],
+    "nextCursor": null
+  },
+  "error": null
+}
+```
+
+### Create Review
+
+```http
+POST /api/providers/:id/reviews
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "rating": 5,
+  "title": "Excellent visit",
+  "body": "Clear and helpful.",
+  "authorName": "George"
+}
+```
+
+Success status: `201`
+
+Validation failures return `400`, unknown providers return `404`, and unexpected
+errors return `500`.
+
+## Data Model
+
+Providers are hardcoded in the shared domain layer. Reviews are stored in one
+DynamoDB table using this single-table key shape:
+
+| Attribute | Value pattern                         | Purpose                         |
+|-----------|---------------------------------------|---------------------------------|
+| `pk`      | `PROVIDER#<providerId>`               | Provider review partition       |
+| `sk`      | `REVIEW#<isoTimestamp>#<reviewId>`    | Chronological review sort key   |
+
+Stored review attributes:
+
+- `reviewId`
+- `providerId`
+- `rating`
+- `title`
+- `body`
+- `authorName`
+- `createdAt`
+
+Reads use `QueryCommand` by `pk` with `ScanIndexForward: false`, so reviews are
+returned newest-first. Pagination uses DynamoDB `LastEvaluatedKey`, encoded as a
+base64 cursor and passed back as `ExclusiveStartKey`.
+
+## IAM Policy Explanation
+
+The App Runner instance role policy lives at
+`infra/iam/apprunner-dynamodb-policy.json`.
+
+It is scoped to one table ARN:
+
+```text
+arn:aws:dynamodb:<region>:<account-id>:table/provider-reviews
+```
+
+The app only needs:
+
+- `dynamodb:PutItem` to create reviews
+- `dynamodb:Query` to list reviews by provider
+
+The policy intentionally does not use `dynamodb:*` and does not use `Resource:
+"*"`.
+
+## Assignment Checklist
+
+- [x] Next.js App Router project implemented.
+- [x] Shared provider and review domain types added.
+- [x] Exactly three hardcoded providers added.
+- [x] Shared Zod validation added for review creation.
+- [x] DynamoDB DocumentClient helper added.
+- [x] Single-table DynamoDB review repository added.
+- [x] Review storage uses `pk = PROVIDER#<providerId>`.
+- [x] Review storage uses `sk = REVIEW#<isoTimestamp>#<reviewId>`.
+- [x] Review IDs use `crypto.randomUUID()`.
+- [x] Review timestamps use ISO strings.
+- [x] List reviews uses `QueryCommand`, not table-wide reads.
+- [x] Cursor pagination uses base64-encoded DynamoDB keys.
+- [x] API route handlers added for GET and POST reviews.
+- [x] API validates provider IDs against the hardcoded provider seed.
+- [x] API validates POST bodies with the shared Zod schema.
+- [x] API uses the required `{ data, error }` envelope.
+- [x] Provider reviews page implemented.
+- [x] Page shows provider name, average rating, reviews, and form.
+- [x] UI includes loading, empty, error/retry, partial submit refresh, and populated states.
+- [x] Client-side Zod validation runs before submit.
+- [x] Pagination UI supports `nextCursor` with a Load more button.
+- [x] Production Dockerfile added with `deps`, `build`, and `runner` stages.
+- [x] `.dockerignore` added.
+- [x] DynamoDB table setup documented with AWS CLI.
+- [x] App Runner deployment documented with ECR.
+- [x] Scoped IAM policy added for DynamoDB access.
+
+## Manual Test Cases
+
+1. Provider with no reviews
+   - Use an empty DynamoDB table or provider with no reviews.
+   - Open `/providers/demo-001/reviews`.
+   - Expected: empty state appears and average rating says no ratings yet.
+
+2. Create valid review
+   - Open `/providers/demo-001/reviews`.
+   - Select a rating, enter title, body, and author name.
+   - Submit.
+   - Expected: request succeeds, review appears, average rating updates, and review persists after refresh.
+
+3. Invalid rating
+   - Submit with no rating selected.
+   - Expected: client validation shows a rating error and no request is sent.
+
+4. Missing title, body, or author
+   - Submit with one or more required text fields empty.
+   - Expected: client validation shows field errors.
+
+5. Pagination
+   - Create more than 10 reviews for `demo-001`.
+   - Open the reviews page.
+   - Expected: first page loads with a **Load more** button.
+   - Click **Load more**.
+   - Expected: more reviews append and the button disappears when `nextCursor` is `null`.
+
+6. Provider not found
+   - Open `/providers/not-real/reviews`.
+   - Expected: Next.js not-found page.
+   - Call `/api/providers/not-real/reviews`.
+   - Expected: `404` response with `{ data: null, error: { message, code } }`.
+
+## Improvements With More Time
+
+I would add automated integration tests around the API routes and repository,
+using a local DynamoDB test instance or mocked AWS SDK client. I would add
+observability around failed DynamoDB calls and App Runner request logs so
+production debugging is faster. I would also add CI to run typecheck, build,
+and targeted tests on every pull request.
+
+## Hours Spent
+
+Estimated: 8 hours.
