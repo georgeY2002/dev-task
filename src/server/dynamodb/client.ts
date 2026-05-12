@@ -3,6 +3,10 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 let documentClient: DynamoDBDocumentClient | null = null;
 
+export function hasDynamoDbConfig(): boolean {
+  return Boolean(process.env.AWS_REGION && process.env.TABLE_NAME);
+}
+
 function getRequiredEnv(name: "AWS_REGION" | "TABLE_NAME"): string {
   const value = process.env[name];
 

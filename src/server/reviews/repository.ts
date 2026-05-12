@@ -7,7 +7,8 @@ import {
 } from "@/domain/reviews";
 import {
   getDynamoDocumentClient,
-  getTableName
+  getTableName,
+  hasDynamoDbConfig
 } from "@/server/dynamodb/client";
 
 const DEFAULT_REVIEW_LIMIT = 20;
@@ -19,6 +20,9 @@ type ReviewItem = Review & {
 };
 
 type ReviewKey = Pick<ReviewItem, "pk" | "sk">;
+type MemoryCursor = {
+  offset: number;
+};
 
 export type ListReviewsOptions = {
   limit?: number;
@@ -47,6 +51,43 @@ function encodeCursor(lastEvaluatedKey?: Record<string, unknown>): string | null
   }
 
   return Buffer.from(JSON.stringify(lastEvaluatedKey), "utf8").toString("base64");
+}
+
+function encodeMemoryCursor(cursor: MemoryCursor | null): string | null {
+  if (!cursor) {
+    return null;
+  }
+
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64");
+}
+
+function decodeMemoryCursor(cursor: string | null | undefined): MemoryCursor {
+  if (!cursor) {
+    return { offset: 0 };
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, "base64").toString("utf8"));
+  } catch {
+    throw new Error("Invalid reviews pagination cursor.");
+  }
+
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("offset" in parsed) ||
+    typeof parsed.offset !== "number" ||
+    !Number.isInteger(parsed.offset) ||
+    parsed.offset < 0
+  ) {
+    throw new Error("Invalid reviews pagination cursor.");
+  }
+
+  return {
+    offset: parsed.offset
+  };
 }
 
 function decodeCursor(
@@ -98,10 +139,57 @@ function toReview(item: Record<string, unknown>): Review {
   };
 }
 
+const memoryReviews = new Map<string, Review[]>();
+
+function shouldUseMemoryStore(): boolean {
+  return process.env.NODE_ENV !== "production" && !hasDynamoDbConfig();
+}
+
+function createMemoryReview(
+  providerId: string,
+  input: ReviewCreateInput
+): Review {
+  const parsedInput = reviewCreateInputSchema.parse(input);
+  const review: Review = {
+    reviewId: crypto.randomUUID(),
+    providerId,
+    createdAt: new Date().toISOString(),
+    ...parsedInput
+  };
+  const providerReviews = memoryReviews.get(providerId) ?? [];
+
+  memoryReviews.set(providerId, [review, ...providerReviews]);
+
+  return review;
+}
+
+function listMemoryReviews(
+  providerId: string,
+  options: ListReviewsOptions
+): PaginatedReviewsResponse {
+  const limit = normalizeLimit(options.limit);
+  const { offset } = decodeMemoryCursor(options.cursor);
+  const providerReviews = memoryReviews.get(providerId) ?? [];
+  const reviews = providerReviews.slice(offset, offset + limit);
+  const nextOffset = offset + reviews.length;
+
+  return {
+    reviews,
+    nextCursor:
+      nextOffset < providerReviews.length
+        ? encodeMemoryCursor({ offset: nextOffset })
+        : null
+  };
+}
+
 export async function createReview(
   providerId: string,
   input: ReviewCreateInput
 ): Promise<Review> {
+  if (shouldUseMemoryStore()) {
+    return createMemoryReview(providerId, input);
+  }
+
   const parsedInput = reviewCreateInputSchema.parse(input);
   const reviewId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -131,6 +219,10 @@ export async function listReviews(
   providerId: string,
   options: ListReviewsOptions = {}
 ): Promise<PaginatedReviewsResponse> {
+  if (shouldUseMemoryStore()) {
+    return listMemoryReviews(providerId, options);
+  }
+
   const providerPk = getProviderPk(providerId);
 
   const result = await getDynamoDocumentClient().send(
