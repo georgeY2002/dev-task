@@ -19,6 +19,27 @@ Next.js App Router app for a small **provider reviews** experience: patients can
 
 Other scripts: `npm run build`, `npm run start`, `npm run lint`, `npm run typecheck`.
 
+## Local Docker
+
+Build the production image:
+
+```bash
+docker build -t provider-reviews-mini-service .
+```
+
+Run the production Next.js server:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e AWS_REGION=us-east-1 \
+  -e TABLE_NAME=provider-reviews \
+  provider-reviews-mini-service
+```
+
+Open [http://localhost:3000](http://localhost:3000). The container expects AWS
+credentials to be provided by the runtime environment when it needs to access
+DynamoDB.
+
 ## Environment variables
 
 Copy `.env.example` to `.env.local` and fill in values when you connect AWS (later phases).
