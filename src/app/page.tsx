@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomeUiPreview } from "@/app/_components/HomeUiPreview";
 import { Button } from "@/components/ui/Button";
 import { DEMO_PROVIDER_ID } from "@/lib/constants";
 
@@ -6,7 +7,7 @@ export default function HomePage() {
   const demoPath = `/providers/${DEMO_PROVIDER_ID}/reviews`;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main className="mx-auto max-w-5xl px-6 py-16">
       <div className="space-y-5">
         <h1 className="text-3xl font-semibold tracking-tight">
           Provider Reviews Mini-Service
@@ -28,6 +29,7 @@ export default function HomePage() {
           directly.
         </p>
       </div>
+      <HomeUiPreview />
     </main>
   );
 }
